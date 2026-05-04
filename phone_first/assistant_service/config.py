@@ -21,7 +21,7 @@ class AssistantConfig:
         "INITIAL_GREETING",
         "Hello! I'm MS DHONI. Press and speak when you're ready.",
     )
-    max_response_sentences: int = int(os.getenv("MAX_RESPONSE_SENTENCES", "5"))
+    max_response_sentences: int = int(os.getenv("MAX_RESPONSE_SENTENCES", "6"))
     sarvam_stt_language: str = os.getenv("SARVAM_STT_LANGUAGE", "en-IN")
     sarvam_stt_model: str = os.getenv("SARVAM_STT_MODEL", "saaras:v3")
     sarvam_stt_mode: str = os.getenv("SARVAM_STT_MODE", "transcribe")
