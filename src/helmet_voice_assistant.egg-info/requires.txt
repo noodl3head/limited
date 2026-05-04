@@ -1,0 +1,7 @@
+livekit-agents[sarvam,silero]~=1.4
+livekit-plugins-noise-cancellation~=0.2
+python-dotenv<2.0.0,>=1.0.1
+pynput>=1.7
+
+[dev]
+ruff<0.12.0,>=0.11.0

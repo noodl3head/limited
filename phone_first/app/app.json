@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Helmet Phone First",
+    "slug": "helmet-phone-first",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "helmet-phone-first",
+    "android": {
+      "package": "com.helmet.phonefirst",
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT"
+      ]
+    },
+    "plugins": [
+      "expo-dev-client",
+      "expo-router",
+      "./plugins/withLiveKit",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25",
+            "newArchEnabled": false,
+            "minSdkVersion": 24
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "8b164799-2b62-45d3-ba67-9bdafaa4542c"
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+aiohttp>=3.10,<4.0
+livekit-agents[sarvam,silero]~=1.4
+livekit-plugins-noise-cancellation~=0.2
+python-dotenv>=1.0.1,<2.0.0

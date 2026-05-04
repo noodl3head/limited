@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: helmet-phone-first-backend
+    runtime: python
+    rootDir: phone_first
+    buildCommand: pip install uv && uv sync
+    startCommand: uv run phone-first-backend
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.14
+      - key: BACKEND_HOST
+        value: 0.0.0.0
+      - key: ASSISTANT_AGENT_NAME
+        value: helmet-phone-first-agent

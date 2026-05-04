@@ -1,0 +1,9 @@
+.venv
+app/node_modules
+app/.expo
+backend/.env
+backend/.env.local
+assistant_service/.env
+assistant_service/.env.local
+__pycache__
+*.pyc

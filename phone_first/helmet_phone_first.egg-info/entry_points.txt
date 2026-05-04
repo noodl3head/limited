@@ -1,0 +1,4 @@
+[console_scripts]
+phone-first-assistant = assistant_service.main:main
+phone-first-assistant-stable = assistant_service.stable:main
+phone-first-backend = backend.server:main

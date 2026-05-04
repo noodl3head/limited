@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.sarvam.ai)",
+      "WebFetch(domain:docs.livekit.io)",
+      "Bash(node -e \"const lk = require\\('./node_modules/@livekit/react-native/lib/commonjs/index.js'\\); console.log\\(Object.keys\\(lk\\).filter\\(k => k.includes\\('Room'\\) || k === 'Room'\\)\\)\")",
+      "Bash(node -e \"const lk = require\\('@livekit/react-native'\\); console.log\\(Object.keys\\(lk\\).slice\\(0,30\\)\\)\")",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
