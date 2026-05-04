@@ -15,7 +15,7 @@ class AssistantConfig:
     assistant_name: str = os.getenv("ASSISTANT_NAME", "MS Dhoni")
     initial_greeting: str = os.getenv(
         "INITIAL_GREETING",
-        "Helmet assistant online. Press and speak when you're ready.",
+        "Hello! I'm MS DHONI. Press and speak when you're ready.",
     )
     max_response_sentences: int = int(os.getenv("MAX_RESPONSE_SENTENCES", "5"))
     sarvam_stt_language: str = os.getenv("SARVAM_STT_LANGUAGE", "en-IN")
