@@ -16,7 +16,7 @@ load_dotenv(_ASSISTANT_DIR / ".env")
 class AssistantConfig:
     agent_name: str = os.getenv("ASSISTANT_AGENT_NAME", "helmet-phone-first-agent")
     llm_model: str = os.getenv("LLM_MODEL", "openai/gpt-4.1-mini")
-    assistant_name: str = os.getenv("ASSISTANT_NAME", "Rider")
+    assistant_name: str = os.getenv("ASSISTANT_NAME", "MS Dhoni")
     initial_greeting: str = os.getenv(
         "INITIAL_GREETING",
         "Hello! I'm MS DHONI. Press and speak when you're ready.",
