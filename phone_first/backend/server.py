@@ -89,6 +89,23 @@ async def _get_assistant_status(
     return ("connected" if assistant_connected else "dispatched", identities)
 
 
+def _reconstruct_session_record(
+    config: BackendConfig, session_id: str
+) -> SessionRecord | None:
+    session_key = session_id.strip().lower()
+    if len(session_key) < 8:
+        return None
+
+    room_suffix = session_key[:8]
+    return SessionRecord(
+        session_id=session_key,
+        room_name=f"{config.room_prefix}-{room_suffix}",
+        participant_identity=f"{config.participant_prefix}-{room_suffix}",
+        dispatch_id="unknown",
+        created_at="unknown",
+    )
+
+
 async def create_session(request: web.Request) -> web.Response:
     config: BackendConfig = request.app["config"]
     sessions: dict[str, SessionRecord] = request.app["sessions"]
@@ -148,9 +165,22 @@ async def get_session(request: web.Request) -> web.Response:
     session_id = request.match_info["session_id"]
     session = sessions.get(session_id)
     if session is None:
-        return web.json_response({"error": "Session not found"}, status=404)
+        session = _reconstruct_session_record(config, session_id)
+        if session is None:
+            return web.json_response({"error": "Session not found"}, status=404)
+        logger.info(
+            "Reconstructed stateless session %s for room %s",
+            session.session_id,
+            session.room_name,
+        )
 
-    assistant_status, participant_identities = await _get_assistant_status(config, session)
+    try:
+        assistant_status, participant_identities = await _get_assistant_status(config, session)
+    except api.TwirpError as error:
+        if error.code == "not_found":
+            return web.json_response({"error": "Session not found"}, status=404)
+        raise
+
     payload = _session_payload(
         config=config,
         session=session,
