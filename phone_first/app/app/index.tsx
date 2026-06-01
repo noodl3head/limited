@@ -398,6 +398,7 @@ const styles = StyleSheet.create({
   pttBox: {
     alignItems: 'center',
     gap: 16,
+    width: '100%',
   },
   statusText: {
     color: '#4ade80',
