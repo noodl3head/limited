@@ -9,6 +9,24 @@ existing laptop-first worker or the original `companion/` app.
 - `assistant_service/`: the deployable LiveKit assistant worker registered for explicit dispatch
 - `app/`: an Expo companion app variant that requests a session from the backend instead of asking the user for a token
 
+## Directions with Mappls
+
+The phone-first stack now supports assistant-native directions using Mappls:
+
+- the app publishes the rider's current GPS location to the backend once the session connects
+- the assistant can call a backend directions endpoint when the rider asks for routes, ETA, or distance
+- the backend geocodes the destination and computes a biking route with Mappls
+
+To enable this, set the same shared secret in:
+
+- `backend/.env.local` as `ASSISTANT_BACKEND_TOKEN`
+- the LiveKit Cloud assistant secrets as `ASSISTANT_BACKEND_TOKEN`
+
+You also need:
+
+- `MAPPLS_ACCESS_TOKEN` in `backend/.env.local`
+- `BACKEND_BASE_URL` in the assistant service environment, pointing at your deployed backend
+
 ## Quick start
 
 1. Install Python dependencies for this subtree:

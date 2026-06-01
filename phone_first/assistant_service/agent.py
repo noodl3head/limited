@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from livekit import agents
-from livekit.agents import Agent, AgentSession, RoomInputOptions, WorkerOptions
+from livekit.agents import Agent, AgentSession, RoomInputOptions, WorkerOptions, llm
 from livekit.plugins import sarvam, silero
 
 try:
@@ -11,6 +11,7 @@ try:
 except ImportError:  # pragma: no cover - optional runtime dependency
     noise_cancellation = None
 
+from assistant_service.backend_client import AssistantBackendClient, AssistantBackendError
 from assistant_service.config import AssistantConfig
 
 
@@ -21,7 +22,12 @@ CONFIG = AssistantConfig()
 
 
 class HelmetAssistant(Agent):
-    def __init__(self) -> None:
+    def __init__(self, *, room_name: str) -> None:
+        self._room_name = room_name
+        self._backend_client = AssistantBackendClient(
+            base_url=CONFIG.backend_base_url,
+            assistant_backend_token=CONFIG.assistant_backend_token,
+        )
         super().__init__(
             instructions=(
                 f"You are {CONFIG.assistant_name}, a riding co-pilot. "
@@ -30,11 +36,35 @@ class HelmetAssistant(Agent):
                 "Respond only when the rider speaks. "
                 f"Maximum {CONFIG.max_response_sentences} sentence(s). One is better. "
                 "Always respond in English only. "
+                "If the rider asks for directions, route guidance, ETA, or how far a destination is, "
+                "call the get_directions tool. "
+                "If the tool says location is unavailable, ask the rider to enable location or retry once the ride session has location access. "
+                "If the tool returns a route, summarize it naturally with the destination, ETA, distance, and first maneuver. "
                 "Never say: 'standing by', 'ready', 'let me know', 'anything else', 'on standby', or any variation. "
                 "Silence is correct. Speak only when answering a direct input."
-                
             )
         )
+
+    @llm.function_tool
+    async def get_directions(self, destination_query: str) -> dict[str, object]:
+        """Get riding directions, ETA, and first maneuver for a destination."""
+        destination_query = destination_query.strip()
+        if not destination_query:
+            return {
+                "status": "error",
+                "message": "No destination was provided.",
+            }
+
+        try:
+            return await self._backend_client.get_directions(
+                room_name=self._room_name,
+                destination_query=destination_query,
+            )
+        except AssistantBackendError as error:
+            return {
+                "status": "error",
+                "message": str(error),
+            }
 
 
 def prewarm(proc: agents.JobProcess) -> None:
@@ -78,7 +108,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     await session.start(
         room=ctx.room,
-        agent=HelmetAssistant(),
+        agent=HelmetAssistant(room_name=ctx.room.name),
         room_input_options=room_input_options,
     )
 

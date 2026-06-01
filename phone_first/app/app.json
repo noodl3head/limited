@@ -17,6 +17,12 @@
     },
     "plugins": [
       "expo-dev-client",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Helmet Phone First uses your location to fetch riding directions."
+        }
+      ],
       "expo-router",
       "./plugins/withLiveKit",
       [

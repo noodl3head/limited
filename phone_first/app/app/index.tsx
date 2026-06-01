@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { AudioSession, AndroidAudioTypePresets } from '@livekit/react-native';
+import * as Location from 'expo-location';
 import { Room, RoomEvent, Track } from 'livekit-client';
 
 type Status = 'idle' | 'requesting' | 'connecting' | 'connected' | 'error';
@@ -30,12 +31,24 @@ type SessionStatusResponse = {
   participants?: string[];
 };
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? '';
+type SessionLocationContextPayload = {
+  location: {
+    latitude: number;
+    longitude: number;
+    accuracyMeters?: number;
+  };
+  capturedAt: string;
+};
+
+const BACKEND_URL =
+  (process.env as Record<string, string | undefined>)['EXPO_PUBLIC_BACKEND_URL'] ?? '';
 
 export default function HomeScreen() {
   const roomRef = useRef<Room | null>(null);
   const audioSessionStartedRef = useRef(false);
   const sessionPollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const locationPollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const locationPermissionDeniedRef = useRef(false);
 
   const [status, setStatus] = useState<Status>('idle');
   const [assistantStatus, setAssistantStatus] = useState<AssistantStatus>('idle');
@@ -50,6 +63,13 @@ export default function HomeScreen() {
     if (sessionPollerRef.current) {
       clearInterval(sessionPollerRef.current);
       sessionPollerRef.current = null;
+    }
+  }, []);
+
+  const stopLocationPolling = useCallback(() => {
+    if (locationPollerRef.current) {
+      clearInterval(locationPollerRef.current);
+      locationPollerRef.current = null;
     }
   }, []);
 
@@ -80,6 +100,27 @@ export default function HomeScreen() {
     });
 
     return result === PermissionsAndroid.RESULTS.GRANTED;
+  }, []);
+
+  const ensureLocationPermission = useCallback(async () => {
+    if (locationPermissionDeniedRef.current) return false;
+
+    const currentPermission = await Location.getForegroundPermissionsAsync();
+    if (currentPermission.granted) {
+      return true;
+    }
+
+    if (!currentPermission.canAskAgain) {
+      locationPermissionDeniedRef.current = true;
+      return false;
+    }
+
+    const requestedPermission = await Location.requestForegroundPermissionsAsync();
+    if (!requestedPermission.granted && !requestedPermission.canAskAgain) {
+      locationPermissionDeniedRef.current = true;
+    }
+
+    return requestedPermission.granted;
   }, []);
 
   const startAudioSession = useCallback(async () => {
@@ -131,6 +172,7 @@ export default function HomeScreen() {
         setAssistantStatus('idle');
         setPttActive(false);
         stopSessionPolling();
+        stopLocationPolling();
       })
       .on(RoomEvent.LocalTrackPublished, (publication) => {
         console.log('[phone-first] local track published', publication.source, publication.kind);
@@ -157,10 +199,11 @@ export default function HomeScreen() {
 
     return () => {
       stopSessionPolling();
+      stopLocationPolling();
       room.disconnect();
       stopAudioSession();
     };
-  }, [stopAudioSession, stopSessionPolling]);
+  }, [stopAudioSession, stopLocationPolling, stopSessionPolling]);
 
   const fetchSessionStatus = useCallback(async (activeSessionId: string) => {
     if (!activeSessionId) return;
@@ -187,6 +230,61 @@ export default function HomeScreen() {
       }, 2500);
     },
     [fetchSessionStatus, stopSessionPolling]
+  );
+
+  const syncLocationContext = useCallback(
+    async (activeSessionId: string) => {
+      if (!activeSessionId || !BACKEND_URL) return;
+
+      try {
+        const locationGranted = await ensureLocationPermission();
+        if (!locationGranted) {
+          console.log('[phone-first] location permission not granted; skipping sync');
+          return;
+        }
+
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        const payload: SessionLocationContextPayload = {
+          location: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracyMeters:
+              typeof position.coords.accuracy === 'number' ? position.coords.accuracy : undefined,
+          },
+          capturedAt: new Date(position.timestamp).toISOString(),
+        };
+
+        const response = await fetch(`${BACKEND_URL}/sessions/${activeSessionId}/context`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Location sync failed with ${response.status}`);
+        }
+
+        console.log('[phone-first] synced location context for session', activeSessionId);
+      } catch (e: any) {
+        console.warn('[phone-first] failed to sync location context', e);
+      }
+    },
+    [ensureLocationPermission]
+  );
+
+  const startLocationPolling = useCallback(
+    (activeSessionId: string) => {
+      stopLocationPolling();
+      locationPollerRef.current = setInterval(() => {
+        void syncLocationContext(activeSessionId);
+      }, 60000);
+    },
+    [stopLocationPolling, syncLocationContext]
   );
 
   const connect = useCallback(async () => {
@@ -238,25 +336,33 @@ export default function HomeScreen() {
       );
       setStatus('connected');
       startSessionPolling(payload.sessionId);
+      startLocationPolling(payload.sessionId);
       void fetchSessionStatus(payload.sessionId);
+      void syncLocationContext(payload.sessionId);
     } catch (e: any) {
       console.error('[phone-first] connect failed', e);
       setError(e?.message ?? 'Connection failed');
       setStatus('error');
       setAssistantStatus('missing');
+      stopLocationPolling();
       await stopAudioSession();
     }
   }, [
     canStartSession,
+    ensureLocationPermission,
     ensureMicrophonePermission,
     fetchSessionStatus,
+    startLocationPolling,
     startAudioSession,
     startSessionPolling,
+    stopLocationPolling,
     stopAudioSession,
+    syncLocationContext,
   ]);
 
   const disconnect = useCallback(async () => {
     stopSessionPolling();
+    stopLocationPolling();
     await roomRef.current?.disconnect();
     await stopAudioSession();
     setStatus('idle');
@@ -265,7 +371,7 @@ export default function HomeScreen() {
     setSessionId('');
     setRoomName('');
     setError('');
-  }, [stopAudioSession, stopSessionPolling]);
+  }, [stopAudioSession, stopLocationPolling, stopSessionPolling]);
 
   const onPttIn = useCallback(async () => {
     if (status !== 'connected') return;
