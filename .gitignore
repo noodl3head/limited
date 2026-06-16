@@ -12,6 +12,22 @@ companion/.expo/
 
 .env
 .env.local
+helmet_ai/.env
+helmet_ai/.env.local
+helmet_ai/backend/.env
+helmet_ai/backend/.env.local
+helmet_ai/assistant_service/.env
+helmet_ai/assistant_service/.env.local
+helmet_ai/mobile_app/.env
+helmet_ai/mobile_app/node_modules/
+helmet_ai/mobile_app/.expo/
+helmet_ai/mobile_app/android/
+helmet_ai/mobile_app/ios/
+helmet_ai/.venv/
+helmet_ai/**/__pycache__/
+helmet_ai/**/*.egg-info/
+helmet_ai/data/raw/*
+!helmet_ai/data/raw/.gitkeep
 phone_first/backend/.env
 phone_first/backend/.env.local
 phone_first/assistant_service/.env

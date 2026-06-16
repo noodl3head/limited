@@ -1,0 +1,14 @@
+.venv
+mobile_app/node_modules
+mobile_app/.expo
+mobile_app/android
+mobile_app/ios
+mobile_app/.env
+.env
+.env.local
+backend/.env
+backend/.env.local
+assistant_service/.env
+assistant_service/.env.local
+__pycache__
+*.pyc
