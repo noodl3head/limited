@@ -76,16 +76,14 @@ async def run_pipeline(
     client = _get_client(config.gemini_api_key)
     context = _format_memory(memory)
 
-    # Router and enricher run in parallel — if route is "search" the query
-    # is already enriched by the time we need it, saving ~0.5–1s.
     route, enriched_query = await asyncio.gather(
         _route(client, config.gemini_router_model, transcript, context),
-        _enrich(client, config.gemini_enricher_model, transcript),
+        _enrich(client, config.gemini_enricher_model, transcript, context),
     )
     logger.info("Route: %s | Enriched: %s", route, enriched_query)
 
     if route == "device":
-        return await _handle_device(client, config, transcript, context)
+        return await _handle_device(client, config, transcript)
 
     if route == "search":
         result = await _handle_search(client, config, transcript, context, enriched_query)
@@ -103,12 +101,11 @@ async def _handle_device(
     client: genai.Client,
     config: AssistantConfig,
     transcript: str,
-    context: str,
 ) -> PipelineResult:
     intent = await _extract_device_intent(client, config.gemini_router_model, transcript)
-    ack = await _device_ack(client, config.gemini_composer_model, transcript, intent, context)
     logger.info("Device intent: %s", intent)
-    return PipelineResult(text=ack, route="device", device_intent=intent)
+    # No TTS — the action executing is the feedback.
+    return PipelineResult(text="", route="device", device_intent=intent)
 
 
 async def _handle_search(
@@ -165,8 +162,10 @@ async def _route(
     return "chat"
 
 
-async def _enrich(client: genai.Client, model: str, transcript: str) -> str:
+async def _enrich(client: genai.Client, model: str, transcript: str, context: str) -> str:
+    context_block = f"Recent conversation:\n{context}\n\n" if context else ""
     prompt = (
+        f"{context_block}"
         "Convert this spoken Hinglish query from a motorcycle rider into a concise, "
         "effective English web search query. Remove filler words. Be specific. "
         "Return only the search query, nothing else.\n\n"
@@ -268,34 +267,6 @@ async def _extract_device_intent(
         return json.loads(raw)
     except json.JSONDecodeError:
         return {"action": "unknown", "raw": transcript}
-
-
-async def _device_ack(
-    client: genai.Client,
-    model: str,
-    transcript: str,
-    intent: dict,
-    context: str,
-) -> str:
-    action = intent.get("action", "unknown")
-    context_block = f"Recent conversation:\n{context}\n\n" if context else ""
-    prompt = (
-        f"{context_block}"
-        f"The rider said: {transcript}\n"
-        f"Action identified: {action}\n"
-        "Give a very brief natural acknowledgement in Dhoni's voice. "
-        "Do not say you will do it — BluArmor will handle execution. Just acknowledge."
-    )
-    response = await client.aio.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=_DHONI_SYSTEM,
-            max_output_tokens=40,
-            temperature=0.7,
-        ),
-    )
-    return (response.text or "Haan.").strip()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

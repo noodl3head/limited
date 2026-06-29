@@ -180,8 +180,9 @@ async def _handle_utterance(
         # Update working memory
         memory.append(Turn(transcript=transcript, response=result.text))
 
-        # TTS
-        await _speak(tts, audio_source, result.text)
+        # TTS — device route returns empty text; action executing is the feedback
+        if result.text:
+            await _speak(tts, audio_source, result.text)
 
 
 async def _speak(tts: sarvam.TTS, audio_source: rtc.AudioSource, text: str) -> None:
