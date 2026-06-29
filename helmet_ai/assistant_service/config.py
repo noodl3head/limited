@@ -34,8 +34,8 @@ class AssistantConfig:
 
     # Gemini
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-    gemini_router_model: str = os.getenv("GEMINI_ROUTER_MODEL", "gemini-2.0-flash-lite")
-    gemini_enricher_model: str = os.getenv("GEMINI_ENRICHER_MODEL", "gemini-2.0-flash")
+    gemini_router_model: str = os.getenv("GEMINI_ROUTER_MODEL", "gemini-2.5-flash-lite")
+    gemini_enricher_model: str = os.getenv("GEMINI_ENRICHER_MODEL", "gemini-2.5-flash")
     gemini_composer_model: str = os.getenv("GEMINI_COMPOSER_MODEL", "gemini-2.5-flash")
 
     # Brave Search
