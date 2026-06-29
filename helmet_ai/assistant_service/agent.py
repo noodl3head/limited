@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
 
 from livekit import agents, rtc
 from livekit.agents import WorkerOptions
@@ -9,12 +10,14 @@ from livekit.agents.vad import VADEventType
 from livekit.plugins import sarvam, silero
 
 from assistant_service.config import AssistantConfig
-from assistant_service.pipeline import run_pipeline
+from assistant_service.pipeline import PipelineResult, Turn, run_pipeline
 
 logger = logging.getLogger("helmet-assistant")
 logging.basicConfig(level=logging.INFO)
 
 CONFIG = AssistantConfig()
+
+_MEMORY_SIZE = 5  # number of turns to keep in working memory
 
 
 def prewarm(proc: agents.JobProcess) -> None:
@@ -44,7 +47,6 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         max_chunk_length=120,
     )
 
-    # Audio source for TTS output — published as a local track in the room
     audio_source = rtc.AudioSource(CONFIG.sarvam_tts_sample_rate, 1)
     local_track = rtc.LocalAudioTrack.create_audio_track("assistant-audio", audio_source)
 
@@ -64,14 +66,22 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     audio_track = await _get_audio_track(ctx.room, participant)
     logger.info("Got audio track from participant %s", participant.identity)
 
-    await _audio_loop(audio_track, vad=vad, stt=stt, tts=tts, audio_source=audio_source)
+    memory: deque[Turn] = deque(maxlen=_MEMORY_SIZE)
+
+    await _audio_loop(
+        audio_track,
+        vad=vad,
+        stt=stt,
+        tts=tts,
+        audio_source=audio_source,
+        memory=memory,
+    )
 
 
 async def _get_audio_track(
     room: rtc.Room,
     participant: rtc.RemoteParticipant,
 ) -> rtc.Track:
-    # Check already-subscribed tracks first
     for pub in participant.track_publications.values():
         if pub.track is not None and pub.kind == rtc.TrackKind.KIND_AUDIO:
             return pub.track
@@ -102,33 +112,29 @@ async def _audio_loop(
     stt: sarvam.STT,
     tts: sarvam.TTS,
     audio_source: rtc.AudioSource,
+    memory: deque[Turn],
 ) -> None:
     audio_stream = rtc.AudioStream(track, sample_rate=16000, num_channels=1)
     vad_stream = vad.stream()
+    pipeline_lock = asyncio.Lock()
 
-    # Feed audio frames into VAD concurrently
     async def _feed() -> None:
         async for audio_event in audio_stream:
             vad_stream.push_frame(audio_event.frame)
 
     asyncio.create_task(_feed())
 
-    # One pipeline at a time; if already processing, drop the new utterance
-    pipeline_lock = asyncio.Lock()
-
     async for vad_event in vad_stream:
         if vad_event.type != VADEventType.END_OF_SPEECH:
             continue
 
         frames = vad_event.frames
-        if not frames:
+        if not frames or pipeline_lock.locked():
             continue
 
-        if pipeline_lock.locked():
-            logger.debug("Pipeline busy, dropping utterance")
-            continue
-
-        asyncio.create_task(_handle_utterance(list(frames), pipeline_lock, stt, tts, audio_source))
+        asyncio.create_task(
+            _handle_utterance(list(frames), pipeline_lock, stt, tts, audio_source, memory)
+        )
 
 
 async def _handle_utterance(
@@ -137,6 +143,7 @@ async def _handle_utterance(
     stt: sarvam.STT,
     tts: sarvam.TTS,
     audio_source: rtc.AudioSource,
+    memory: deque[Turn],
 ) -> None:
     async with lock:
         # STT
@@ -154,17 +161,23 @@ async def _handle_utterance(
 
         logger.info("Transcript: %s", transcript)
 
-        # Pipeline
+        # Pipeline — pass a snapshot of current memory
         try:
-            response_text = await run_pipeline(transcript, CONFIG)
+            result: PipelineResult = await run_pipeline(transcript, CONFIG, list(memory))
         except Exception as exc:
             logger.error("Pipeline error: %s", exc)
-            response_text = "Bhai, kuch gadbad ho gayi. Phir poochho."
+            result = PipelineResult(text="Bhai, kuch gadbad ho gayi. Phir poochho.", route="chat")
 
-        logger.info("Response: %s", response_text)
+        logger.info("[%s] Response: %s", result.route.upper(), result.text)
+
+        if result.route == "device" and result.device_intent:
+            logger.info("Device intent for BluArmor: %s", result.device_intent)
+
+        # Update working memory
+        memory.append(Turn(transcript=transcript, response=result.text))
 
         # TTS
-        await _speak(tts, audio_source, response_text)
+        await _speak(tts, audio_source, result.text)
 
 
 async def _speak(tts: sarvam.TTS, audio_source: rtc.AudioSource, text: str) -> None:
