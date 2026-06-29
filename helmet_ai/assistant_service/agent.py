@@ -100,7 +100,7 @@ async def _get_audio_track(
 
     room.on("track_subscribed", _on_subscribed)
     try:
-        return await asyncio.wait_for(fut, timeout=30.0)
+        return await fut
     finally:
         room.off("track_subscribed", _on_subscribed)
 
