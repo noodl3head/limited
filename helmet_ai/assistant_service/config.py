@@ -17,19 +17,27 @@ load_dotenv(_ASSISTANT_DIR / ".env")
 @dataclass(frozen=True)
 class AssistantConfig:
     agent_name: str = os.getenv("ASSISTANT_AGENT_NAME", "helmet-phone-first-agent")
-    llm_model: str = os.getenv("LLM_MODEL", "openai/gpt-4.1-mini")
-    backend_base_url: str = os.getenv("BACKEND_BASE_URL", "")
-    assistant_backend_token: str = os.getenv("ASSISTANT_BACKEND_TOKEN", "")
     assistant_name: str = os.getenv("ASSISTANT_NAME", "MS Dhoni")
-    initial_greeting: str = os.getenv(
-        "INITIAL_GREETING",
-        "Hello! I'm MS DHONI. Press and speak when you're ready.",
-    )
-    max_response_sentences: int = int(os.getenv("MAX_RESPONSE_SENTENCES", "6"))
-    sarvam_stt_language: str = os.getenv("SARVAM_STT_LANGUAGE", "en-IN")
+    initial_greeting: str = os.getenv("INITIAL_GREETING", "Haan bolo.")
+    max_response_sentences: int = int(os.getenv("MAX_RESPONSE_SENTENCES", "2"))
+
+    # Sarvam STT
+    sarvam_stt_language: str = os.getenv("SARVAM_STT_LANGUAGE", "hi-IN")
     sarvam_stt_model: str = os.getenv("SARVAM_STT_MODEL", "saaras:v3")
-    sarvam_stt_mode: str = os.getenv("SARVAM_STT_MODE", "transcribe")
-    sarvam_tts_language: str = os.getenv("SARVAM_TTS_LANGUAGE", "en-IN")
+    sarvam_stt_mode: str = os.getenv("SARVAM_STT_MODE", "codemix")
+
+    # Sarvam TTS
+    sarvam_tts_language: str = os.getenv("SARVAM_TTS_LANGUAGE", "hi-IN")
     sarvam_tts_model: str = os.getenv("SARVAM_TTS_MODEL", "bulbul:v3")
     sarvam_tts_speaker: str = os.getenv("SARVAM_TTS_SPEAKER", "shubh")
     sarvam_tts_sample_rate: int = int(os.getenv("SARVAM_TTS_SAMPLE_RATE", "24000"))
+
+    # Gemini
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    gemini_router_model: str = os.getenv("GEMINI_ROUTER_MODEL", "gemini-2.0-flash-lite")
+    gemini_enricher_model: str = os.getenv("GEMINI_ENRICHER_MODEL", "gemini-2.0-flash")
+    gemini_composer_model: str = os.getenv("GEMINI_COMPOSER_MODEL", "gemini-2.5-flash")
+
+    # Brave Search
+    brave_api_key: str = os.getenv("BRAVE_API_KEY", "")
+    brave_search_count: int = int(os.getenv("BRAVE_SEARCH_COUNT", "5"))

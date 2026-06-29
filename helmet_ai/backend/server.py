@@ -2,27 +2,23 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import hmac
 import json
 import logging
 import uuid
 from dataclasses import asdict, dataclass
 
-import aiohttp
 from aiohttp import web
 from livekit import api
 from livekit.protocol.agent_dispatch import CreateAgentDispatchRequest
 from livekit.protocol.room import CreateRoomRequest, ListParticipantsRequest
 
 from backend.config import BackendConfig
-from backend.mappls import MapplsError, compute_route, geocode_destination
 
 
 logger = logging.getLogger("helmet-phone-first-backend")
 logging.basicConfig(level=logging.INFO)
 
 AGENT_NAME_ATTRIBUTE = "lk.agent.name"
-ASSISTANT_TOKEN_HEADER = "X-Assistant-Token"
 
 
 @dataclass
@@ -126,15 +122,6 @@ def _reconstruct_session_record(
     )
 
 
-def _resolve_session_key_from_room_name(config: BackendConfig, room_name: str | None) -> str | None:
-    if not room_name:
-        return None
-    prefix = f"{config.room_prefix}-"
-    if not room_name.startswith(prefix):
-        return None
-    return _normalize_session_key(room_name[len(prefix) :])
-
-
 def _get_or_reconstruct_session(
     config: BackendConfig, sessions: dict[str, SessionRecord], session_id: str
 ) -> SessionRecord | None:
@@ -142,23 +129,6 @@ def _get_or_reconstruct_session(
     if session is not None:
         return session
     return _reconstruct_session_record(config, session_id)
-
-
-def _require_assistant_auth(request: web.Request, config: BackendConfig) -> web.StreamResponse | None:
-    if not config.assistant_backend_token:
-        logger.warning("Assistant endpoint called but ASSISTANT_BACKEND_TOKEN is not configured")
-        raise web.HTTPServiceUnavailable(
-            text=json.dumps({"error": "Assistant backend token is not configured"}),
-            content_type="application/json",
-        )
-
-    provided = request.headers.get(ASSISTANT_TOKEN_HEADER, "")
-    if not hmac.compare_digest(provided, config.assistant_backend_token):
-        raise web.HTTPUnauthorized(
-            text=json.dumps({"error": "Unauthorized assistant request"}),
-            content_type="application/json",
-        )
-    return None
 
 
 def _parse_location_payload(body: dict[str, object]) -> LocationContext:
@@ -302,86 +272,6 @@ async def update_session_context(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "sessionKey": session_key, "location": asdict(location_context)})
 
 
-async def assistant_directions(request: web.Request) -> web.Response:
-    config: BackendConfig = request.app["config"]
-    location_contexts: dict[str, LocationContext] = request.app["location_contexts"]
-    _require_assistant_auth(request, config)
-
-    try:
-        body = await request.json()
-    except json.JSONDecodeError as exc:
-        raise web.HTTPBadRequest(
-            text=json.dumps({"error": "Invalid JSON body"}),
-            content_type="application/json",
-        ) from exc
-
-    destination_query = str(body.get("destinationQuery") or "").strip()
-    if not destination_query:
-        raise web.HTTPBadRequest(
-            text=json.dumps({"error": "destinationQuery is required"}),
-            content_type="application/json",
-        )
-
-    session_key = _normalize_session_key(body.get("sessionId"))
-    if session_key is None:
-        session_key = _resolve_session_key_from_room_name(config, body.get("roomName"))
-    if session_key is None:
-        raise web.HTTPBadRequest(
-            text=json.dumps({"error": "sessionId or roomName is required"}),
-            content_type="application/json",
-        )
-
-    location_context = location_contexts.get(session_key)
-    if location_context is None:
-        return web.json_response(
-            {
-                "status": "error",
-                "message": "Current location is unavailable for this ride session.",
-            },
-            status=409,
-        )
-
-    if not config.mappls_access_token:
-        raise web.HTTPServiceUnavailable(
-            text=json.dumps({"error": "MAPPLS_ACCESS_TOKEN is not configured"}),
-            content_type="application/json",
-        )
-
-    timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        try:
-            destination = await geocode_destination(
-                session,
-                access_token=config.mappls_access_token,
-                address=destination_query,
-            )
-            directions = await compute_route(
-                session,
-                access_token=config.mappls_access_token,
-                origin_latitude=location_context.latitude,
-                origin_longitude=location_context.longitude,
-                destination=destination,
-                profile=config.mappls_route_profile,
-                resource=config.mappls_route_resource,
-            )
-        except MapplsError as error:
-            return web.json_response({"status": "error", "message": str(error)}, status=error.status)
-
-    return web.json_response(
-        {
-            "status": "ok",
-            "resolvedDestination": directions.resolved_destination,
-            "distanceKm": directions.distance_km,
-            "etaMinutes": directions.eta_minutes,
-            "firstManeuver": directions.first_maneuver,
-            "routeSummary": directions.route_summary,
-            "origin": asdict(location_context),
-            "provider": "mappls",
-            "profile": config.mappls_route_profile,
-        }
-    )
-
-
 async def health(_: web.Request) -> web.Response:
     return web.json_response({"ok": True})
 
@@ -411,7 +301,6 @@ def create_app() -> web.Application:
     app.router.add_post("/sessions", create_session)
     app.router.add_get("/sessions/{session_id}", get_session)
     app.router.add_put("/sessions/{session_id}/context", update_session_context)
-    app.router.add_post("/assistant/directions", assistant_directions)
     app.on_startup.append(startup)
     app.on_cleanup.append(cleanup)
     return app
