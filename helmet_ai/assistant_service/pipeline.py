@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import logging
@@ -14,6 +15,15 @@ if TYPE_CHECKING:
     from assistant_service.config import AssistantConfig
 
 logger = logging.getLogger("helmet-pipeline")
+
+_gemini_client: genai.Client | None = None
+
+
+def _get_client(api_key: str) -> genai.Client:
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=api_key)
+    return _gemini_client
 
 _DHONI_SYSTEM = (
     "You are MS Dhoni — the cricketer, captain, finisher. You're now a voice in a smart helmet."
@@ -63,17 +73,22 @@ async def run_pipeline(
     config: AssistantConfig,
     memory: list[Turn],
 ) -> PipelineResult:
-    client = genai.Client(api_key=config.gemini_api_key)
+    client = _get_client(config.gemini_api_key)
     context = _format_memory(memory)
 
-    route = await _route(client, config.gemini_router_model, transcript, context)
-    logger.info("Route: %s", route)
+    # Router and enricher run in parallel — if route is "search" the query
+    # is already enriched by the time we need it, saving ~0.5–1s.
+    route, enriched_query = await asyncio.gather(
+        _route(client, config.gemini_router_model, transcript, context),
+        _enrich(client, config.gemini_enricher_model, transcript),
+    )
+    logger.info("Route: %s | Enriched: %s", route, enriched_query)
 
     if route == "device":
         return await _handle_device(client, config, transcript, context)
 
     if route == "search":
-        result = await _handle_search(client, config, transcript, context)
+        result = await _handle_search(client, config, transcript, context, enriched_query)
         if result is not None:
             return result
         # search failed or no results — fall through to chat
@@ -101,12 +116,10 @@ async def _handle_search(
     config: AssistantConfig,
     transcript: str,
     context: str,
+    enriched_query: str,
 ) -> PipelineResult | None:
-    search_query = await _enrich(client, config.gemini_enricher_model, transcript)
-    logger.info("Enriched query: %s", search_query)
-
     try:
-        results = await brave_search(search_query, config.brave_api_key, config.brave_search_count)
+        results = await brave_search(enriched_query, config.brave_api_key, config.brave_search_count)
     except Exception as exc:
         logger.warning("Brave search failed (%s), falling back to chat", exc)
         return None

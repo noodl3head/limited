@@ -161,6 +161,10 @@ async def _handle_utterance(
 
         logger.info("Transcript: %s", transcript)
 
+        if len(transcript.split()) < 2:
+            logger.debug("Skipping short/noisy transcript: %r", transcript)
+            return
+
         # Pipeline — pass a snapshot of current memory
         try:
             result: PipelineResult = await run_pipeline(transcript, CONFIG, list(memory))
