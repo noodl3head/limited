@@ -188,10 +188,13 @@ async def _handle_utterance(
 async def _speak(tts: sarvam.TTS, audio_source: rtc.AudioSource, text: str) -> None:
     try:
         stream = tts.synthesize(text)
+        frame_count = 0
         async for chunk in stream:
-            frame = getattr(chunk, "frame", None)
+            frame = getattr(chunk, "frame", None) or getattr(chunk, "audio", None)
             if frame is not None:
                 await audio_source.capture_frame(frame)
+                frame_count += 1
+        logger.info("TTS: %d frames for %r", frame_count, text[:60])
     except Exception as exc:
         logger.error("TTS error: %s", exc)
 
