@@ -57,7 +57,6 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE),
     )
 
-    await _speak(tts, audio_source, CONFIG.initial_greeting)
     logger.info("Connected to room %s", ctx.room.name)
 
     participant = await ctx.wait_for_participant()
@@ -65,6 +64,8 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     audio_track = await _get_audio_track(ctx.room, participant)
     logger.info("Got audio track from participant %s", participant.identity)
+
+    await _speak(tts, audio_source, CONFIG.initial_greeting)
 
     memory: deque[Turn] = deque(maxlen=_MEMORY_SIZE)
 
@@ -125,9 +126,11 @@ async def _audio_loop(
     asyncio.create_task(_feed())
 
     async for vad_event in vad_stream:
+        logger.debug("VAD event: %s", vad_event.type)
         if vad_event.type != VADEventType.END_OF_SPEECH:
             continue
 
+        logger.info("VAD: END_OF_SPEECH, %d frames", len(vad_event.frames or []))
         frames = vad_event.frames
         if not frames or pipeline_lock.locked():
             continue
