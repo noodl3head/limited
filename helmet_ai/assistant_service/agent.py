@@ -65,6 +65,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     audio_track = await _get_audio_track(ctx.room, participant)
     logger.info("Got audio track from participant %s", participant.identity)
 
+    await asyncio.sleep(1.0)
     await _speak(tts, audio_source, CONFIG.initial_greeting)
 
     memory: deque[Turn] = deque(maxlen=_MEMORY_SIZE)
@@ -195,6 +196,13 @@ async def _speak(tts: sarvam.TTS, audio_source: rtc.AudioSource, text: str) -> N
         async for chunk in stream:
             frame = getattr(chunk, "frame", None) or getattr(chunk, "audio", None)
             if frame is not None:
+                if frame_count == 0:
+                    logger.info(
+                        "TTS first frame: sample_rate=%s channels=%s samples_per_channel=%s",
+                        getattr(frame, "sample_rate", "?"),
+                        getattr(frame, "num_channels", "?"),
+                        getattr(frame, "samples_per_channel", "?"),
+                    )
                 await audio_source.capture_frame(frame)
                 frame_count += 1
         logger.info("TTS: %d frames for %r", frame_count, text[:60])

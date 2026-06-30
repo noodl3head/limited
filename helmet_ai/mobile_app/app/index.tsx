@@ -128,7 +128,7 @@ export default function HomeScreen() {
 
     await AudioSession.configureAudio({
       android: {
-        audioTypeOptions: AndroidAudioTypePresets.communication,
+        audioTypeOptions: AndroidAudioTypePresets.media,
       },
       ios: {
         defaultOutput: 'speaker',
