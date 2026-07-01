@@ -121,12 +121,18 @@ async def _audio_loop(
     pipeline_lock = asyncio.Lock()
 
     async def _feed() -> None:
+        count = 0
         async for audio_event in audio_stream:
+            count += 1
+            if count == 1:
+                logger.info("Audio loop started: first frame received")
             vad_stream.push_frame(audio_event.frame)
 
     asyncio.create_task(_feed())
 
     async for vad_event in vad_stream:
+        if vad_event.type == VADEventType.START_OF_SPEECH:
+            logger.info("VAD: START_OF_SPEECH")
         if vad_event.type != VADEventType.END_OF_SPEECH:
             continue
 

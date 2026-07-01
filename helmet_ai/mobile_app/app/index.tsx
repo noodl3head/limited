@@ -45,6 +45,7 @@ const BACKEND_URL =
 
 export default function HomeScreen() {
   const roomRef = useRef<Room | null>(null);
+  const micPubRef = useRef<any>(null);
   const audioSessionStartedRef = useRef(false);
   const sessionPollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const locationPollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -157,6 +158,9 @@ export default function HomeScreen() {
           publication.source,
           publication.kind
         );
+        if (publication.kind === Track.Kind.Audio) {
+          publication.setSubscribed(true);
+        }
       })
       .on(RoomEvent.TrackUnpublished, (publication, participant) => {
         console.log(
@@ -176,6 +180,9 @@ export default function HomeScreen() {
       })
       .on(RoomEvent.LocalTrackPublished, (publication) => {
         console.log('[phone-first] local track published', publication.source, publication.kind);
+        if (publication.source === Track.Source.Microphone) {
+          micPubRef.current = publication;
+        }
       })
       .on(RoomEvent.LocalTrackUnpublished, (publication) => {
         console.log(
@@ -329,8 +336,18 @@ export default function HomeScreen() {
       setStatus('connecting');
       console.log('[phone-first] connecting to room', payload.roomName, payload.livekitUrl);
       await room.connect(payload.livekitUrl, payload.participantToken);
-      await room.localParticipant.setMicrophoneEnabled(false);
+      await room.localParticipant.setMicrophoneEnabled(true);
+      await micPubRef.current?.mute();
       console.log('[phone-first] connected as', room.localParticipant.identity);
+      // Explicitly subscribe to any audio tracks already in the room (agent may have joined first)
+      for (const participant of room.remoteParticipants.values()) {
+        for (const publication of participant.trackPublications.values()) {
+          if (publication.kind === Track.Kind.Audio) {
+            console.log('[phone-first] subscribing to existing audio track from', participant.identity, 'subscribed:', publication.isSubscribed);
+            publication.setSubscribed(true);
+          }
+        }
+      }
       console.log(
         '[phone-first] remote participants after connect',
         Array.from(room.remoteParticipants.values()).map((participant) => participant.identity)
@@ -364,6 +381,7 @@ export default function HomeScreen() {
   const disconnect = useCallback(async () => {
     stopSessionPolling();
     stopLocationPolling();
+    micPubRef.current = null;
     await roomRef.current?.disconnect();
     await stopAudioSession();
     setStatus('idle');
@@ -378,11 +396,11 @@ export default function HomeScreen() {
     if (status !== 'connected') return;
     setError('');
     try {
-      console.log('[phone-first] enabling microphone');
+      console.log('[phone-first] PTT on, micPub:', micPubRef.current?.trackSid ?? 'NULL');
       setPttActive(true);
-      await roomRef.current?.localParticipant.setMicrophoneEnabled(true);
+      await micPubRef.current?.unmute();
     } catch (e: any) {
-      console.error('[phone-first] failed to enable microphone', e);
+      console.error('[phone-first] failed to unmute microphone', e);
       setPttActive(false);
       setError(e?.message ?? 'Failed to enable microphone');
     }
@@ -391,11 +409,11 @@ export default function HomeScreen() {
   const onPttOut = useCallback(async () => {
     if (status !== 'connected') return;
     try {
-      console.log('[phone-first] disabling microphone');
+      console.log('[phone-first] PTT off');
       setPttActive(false);
-      await roomRef.current?.localParticipant.setMicrophoneEnabled(false);
+      await micPubRef.current?.mute();
     } catch (e: any) {
-      console.error('[phone-first] failed to disable microphone', e);
+      console.error('[phone-first] failed to mute microphone', e);
       setError(e?.message ?? 'Failed to disable microphone');
     }
   }, [status]);
