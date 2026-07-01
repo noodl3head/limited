@@ -128,7 +128,7 @@ export default function HomeScreen() {
 
     await AudioSession.configureAudio({
       android: {
-        audioTypeOptions: AndroidAudioTypePresets.media,
+        audioTypeOptions: AndroidAudioTypePresets.communication,
       },
       ios: {
         defaultOutput: 'speaker',
@@ -189,7 +189,8 @@ export default function HomeScreen() {
           '[phone-first] remote track subscribed',
           participant.identity,
           publication.source,
-          track.kind
+          track.kind,
+          'muted:', track.isMuted,
         );
         if (track.kind === Track.Kind.Audio) {
           setAssistantStatus('connected');

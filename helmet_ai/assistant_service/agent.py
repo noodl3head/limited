@@ -127,7 +127,6 @@ async def _audio_loop(
     asyncio.create_task(_feed())
 
     async for vad_event in vad_stream:
-        logger.debug("VAD event: %s", vad_event.type)
         if vad_event.type != VADEventType.END_OF_SPEECH:
             continue
 
